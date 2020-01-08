@@ -28,8 +28,7 @@ func (a *App) daemon() {
 	}
 
 	if len(os.Args) == 1 {
-		flag.Usage()
-		os.Exit(0)
+		debug = true
 	}
 
 	// check args
