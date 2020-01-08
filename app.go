@@ -112,6 +112,8 @@ func (a *App) StopAllSubGoroutine() {
 			log.Infof("task: %v stop success", v.GetTaskName())
 		}
 	}
+
+	time.Sleep(500 * time.Millisecond)
 }
 
 // 释放资源
