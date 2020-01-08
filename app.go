@@ -80,7 +80,6 @@ func (a *App) SafeExit() {
 		signalMsg := <-signalChan
 		log.Warnf("receive signal %v, app is closing", signalMsg)
 
-		a.StopAllSubGoroutine()
 		a.FreeResource()
 		os.Exit(1)
 	}()
