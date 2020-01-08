@@ -21,7 +21,7 @@ type App struct {
 	Env        string         // app run env
 	SessionOn  bool           // session switch
 	Cors       []string       // cors
-	SubGo      []SubGoroutine // sub goroutine
+	Tasks      []SubGoroutine // sub goroutine
 }
 
 // interface
@@ -40,7 +40,7 @@ func NewApp(appName, appVersion, appPort, env string) *App {
 		AppVersion: appVersion,
 		AppPort:    appPort,
 		Env:        env,
-		SubGo:      make([]SubGoroutine, 0, 1),
+		Tasks:      make([]SubGoroutine, 0, 1),
 	}
 }
 
@@ -87,26 +87,31 @@ func (a *App) SafeExit() {
 }
 
 // 添加子携程
-func (a *App) AddSubGoroutine(subGo ...SubGoroutine) {
-	if len(subGo) > 0 {
-		a.SubGo = append(a.SubGo, subGo...)
+func (a *App) AddSubGoroutine(tasks ...SubGoroutine) {
+	if len(tasks) > 0 {
+		a.Tasks = append(a.Tasks, tasks...)
 	}
 }
 
 // 启动所有子携程
 func (a *App) StartAllSubGoroutine() error {
-	for _, v := range a.SubGo {
+	for _, v := range a.Tasks {
 		if err := v.GoroutineStart(); err != nil {
 			return err
 		}
+		log.Infof("task: %v start success", v.GetTaskName())
 	}
 	return nil
 }
 
 // 关闭所有子携程
 func (a *App) StopAllSubGoroutine() {
-	for _, v := range a.SubGo {
-		_ = v.GoroutineStop()
+	for _, v := range a.Tasks {
+		if err := v.GoroutineStop(); err != nil {
+			log.Errorf("task: %v stop err: %v", v.GetTaskName(), err)
+		} else {
+			log.Infof("task: %v stop success", v.GetTaskName())
+		}
 	}
 }
 
