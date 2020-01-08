@@ -87,7 +87,7 @@ func (a *App) SafeExit() {
 }
 
 // 添加子携程
-func (a *App) AppendSubGoroutine(subGo ...SubGoroutine) {
+func (a *App) AddSubGoroutine(subGo ...SubGoroutine) {
 	if len(subGo) > 0 {
 		a.SubGo = append(a.SubGo, subGo...)
 	}
