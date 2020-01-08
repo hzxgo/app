@@ -117,5 +117,6 @@ func (a *App) StopAllSubGoroutine() {
 
 // 释放资源
 func (a *App) FreeResource() {
+	a.StopAllSubGoroutine()
 	mysql.FreeDB()
 }
