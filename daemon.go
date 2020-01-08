@@ -7,12 +7,15 @@ import (
 	"os"
 	"os/exec"
 	"strconv"
+	"strings"
 	"syscall"
 )
 
+// 服务后台运行
 func (a *App) daemon() {
 	var nc, stop, debug, restart bool
 
+	// 启动参数解析
 	flag.Usage = func() {
 		fmt.Printf("Usage: %s [OPTIONS]\n\n", os.Args[0])
 		fmt.Printf("These are the options you can pass:\n")
@@ -77,7 +80,7 @@ func (a *App) daemon() {
 		if pidStr, err := ioutil.ReadFile(pidFile); err == nil {
 			if pid, _ := strconv.Atoi(string(pidStr)); pid > 0 {
 				if _, err := os.FindProcess(pid); err == nil {
-					fmt.Printf("[server: %s, version: %s] is already exists\n\n", a.AppName, a.AppVersion)
+					fmt.Printf("[server: %s, env: %v, version: %s] is already exists\n", a.AppName, a.Env, a.AppVersion)
 					os.Exit(0)
 				}
 			}
@@ -85,53 +88,88 @@ func (a *App) daemon() {
 		a.runAsDaemon()
 	}
 
+	if restart {
+		a.killProcess()
+		a.runAsDaemon()
+	}
+
 	a.savePidFile()
 }
 
+// 服务以守护进程方式运行
 func (a *App) runAsDaemon() {
 	if ppid := os.Getppid(); ppid == 1 {
 		return
 	}
 
-	cmd := exec.Command(GetAbs(os.Args[0]))
-	if len(os.Args) > 1 {
-		cmd.Args = append(cmd.Args, os.Args[1:]...)
-	}
-
+	cmd := exec.Command(GetAbs(os.Args[0]), "-nc")
 	if err := cmd.Start(); err != nil {
 		fmt.Printf("exec cmd: %+v, err: %v\n\n", cmd, err)
 		os.Exit(-1)
 	} else {
-		fmt.Printf("[server: %s, version: %s] run as daemon success.\n\n", a.AppName, a.AppVersion)
+		fmt.Printf("[server: %s, env: %v, version: %s] run as daemon success.\n\n", a.AppName, a.Env, a.AppVersion)
 	}
 
 	os.Exit(0)
 }
 
+// 杀死进程（向进程发Kill信号）
 func (a *App) killProcess() {
+	var pid int
+
+	// git pid
 	pidFile := fmt.Sprintf("%s/run/%s.pid", GetCurrPath(), a.AppName)
-	if pidStr, err := ioutil.ReadFile(pidFile); err == nil {
-		if pid, _ := strconv.Atoi(string(pidStr)); pid > 0 {
-			if p, err := os.FindProcess(pid); err == nil {
-				if err = p.Signal(syscall.SIGKILL); err == nil {
-					fmt.Printf("[server: %s, version: %s] stoped okay!\n\n", a.AppName, a.AppVersion)
-				} else {
-					fmt.Printf("kill %s failed, pid: %d, err: %v\n\n", a.AppName, pid, err)
-				}
-				if err := os.Remove(pidFile); err != nil {
-					fmt.Printf("remove pid_file: %s failed. err: %v\n\n", pidFile, err)
-				}
-			} else {
-				fmt.Printf("os find process: %d failed\n\n", pid)
-			}
+	pidString, err := ioutil.ReadFile(pidFile)
+	if pid, _ = strconv.Atoi(string(pidString)); pid <= 0 {
+		if pid, _ = a.getPid(a.AppPort, a.AppName); pid <= 0 {
+			fmt.Printf("kill %s failed, err: %v\n\n", a.AppName, err)
+			return
+		}
+	}
+
+	if p, err := os.FindProcess(pid); err == nil {
+		if err = p.Signal(syscall.SIGKILL); err == nil {
+			fmt.Printf("[server: %s, env: %v, version: %s] stoped okay!\n\n", a.AppName, a.Env, a.AppVersion)
 		} else {
-			fmt.Printf("pid should greater than 0\n\n")
+			fmt.Printf("kill %s failed, pid: %d, err: %v\n\n", a.AppName, pid, err)
+		}
+		if err := os.Remove(pidFile); err != nil {
+			fmt.Printf("%v\n\n", err)
 		}
 	} else {
-		fmt.Printf("not exists\n\n")
+		fmt.Printf("os find process: %d failed\n\n", pid)
 	}
 }
 
+// 获取进程ID
+func (a *App) getPid(port string, serverName string) (int, error) {
+	cmd := fmt.Sprintf(`netstat -tnlp | grep %s `, port)
+	output, err := exec.Command("sh", "-c", cmd).CombinedOutput()
+	if err != nil {
+		return 0, err
+	}
+
+	outputString := strings.TrimSpace(string(output))
+	outputSlice := strings.Split(outputString, "\n")
+
+	for _, v := range outputSlice {
+		// line_format: [tcp 0 0 127.0.0.1:5432 0.0.0.0:* LISTEN 19436/postgres]
+		line := strings.Fields(v)
+		if length := len(line); length > 0 {
+			if portNameSlice := strings.Split(line[length-1], "/"); len(portNameSlice) == 2 {
+				findPid, _ := strconv.Atoi(strings.TrimSpace(portNameSlice[0]))
+				findName := strings.TrimSpace(portNameSlice[1])
+				if findName == serverName {
+					return findPid, nil
+				}
+			}
+		}
+	}
+
+	return 0, fmt.Errorf("pid not found")
+}
+
+// 保存PID号
 func (a *App) savePidFile() {
 	pid := []byte(fmt.Sprintf("%d", syscall.Getpid()))
 	pidFile := fmt.Sprintf("%s/run/%s.pid", GetCurrPath(), a.AppName)

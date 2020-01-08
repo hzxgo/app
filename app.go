@@ -13,25 +13,33 @@ import (
 	"github.com/hzxgo/mysql"
 )
 
+// 通用App
 type App struct {
 	AppName    string         // app name
 	AppVersion string         // app version
+	AppPort    string         // app listen port
+	Env        string         // app run env
 	SessionOn  bool           // session switch
 	Cors       []string       // cors
 	SubGo      []SubGoroutine // sub goroutine
 }
 
+// interface
+// 子携程需实现该接口
 type SubGoroutine interface {
+	GetTaskName() string
 	GoroutineStart() error
 	GoroutineStop() error
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
 
-func NewApp(appName, appVersion string) *App {
+func NewApp(appName, appVersion, appPort, env string) *App {
 	return &App{
 		AppName:    appName,
 		AppVersion: appVersion,
+		AppPort:    appPort,
+		Env:        env,
 		SubGo:      make([]SubGoroutine, 0, 1),
 	}
 }
@@ -50,6 +58,8 @@ func (a *App) Init() *gin.Engine {
 	log.Info("------------------------------------------")
 
 	r := gin.Default()
+
+	// 设置跨域
 	if len(a.Cors) > 0 {
 		r.Use(cors.Default(a.Cors))
 	}
@@ -59,11 +69,12 @@ func (a *App) Init() *gin.Engine {
 	return r
 }
 
+// 安全退出
 func (a *App) SafeExit() {
 	go func() {
 		signalChan := make(chan os.Signal, 1)
-		signal.Notify(signalChan,
-			os.Kill, os.Interrupt,
+		signal.Notify(
+			signalChan, os.Kill, os.Interrupt,
 			syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
 		signalMsg := <-signalChan
@@ -75,12 +86,14 @@ func (a *App) SafeExit() {
 	}()
 }
 
+// 添加子携程
 func (a *App) AppendSubGoroutine(subGo ...SubGoroutine) {
 	if len(subGo) > 0 {
 		a.SubGo = append(a.SubGo, subGo...)
 	}
 }
 
+// 启动所有子携程
 func (a *App) StartAllSubGoroutine() error {
 	for _, v := range a.SubGo {
 		if err := v.GoroutineStart(); err != nil {
@@ -90,12 +103,14 @@ func (a *App) StartAllSubGoroutine() error {
 	return nil
 }
 
+// 关闭所有子携程
 func (a *App) StopAllSubGoroutine() {
 	for _, v := range a.SubGo {
 		_ = v.GoroutineStop()
 	}
 }
 
+// 释放资源
 func (a *App) FreeResource() {
 	mysql.FreeDB()
 }
